@@ -2,6 +2,8 @@
 
 An interactive Node.js CLI tool to monitor and manage resource-intensive processes on your system.
 
+![](./images/example.png)
+
 ## Features
 
 - Display top 20 processes by CPU or Memory usage
