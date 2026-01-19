@@ -90,13 +90,32 @@ function displayProcessTable(processes, sortBy) {
 
 /**
  * Kill a process by PID
+ * Automatically retries with sudo if permission is denied
  */
 function killProcess(pid, signal = 'SIGTERM') {
   try {
-    execSync(`kill -${signal} ${pid}`, { encoding: 'utf-8' });
-    return true;
+    // First attempt without sudo
+    execSync(`kill -${signal} ${pid}`, { encoding: 'utf-8', stdio: 'pipe' });
+    return { success: true, usedSudo: false };
   } catch (error) {
-    return false;
+    // Check if it's a permission error
+    const errorMsg = error.message.toLowerCase();
+    const isPermissionError = errorMsg.includes('operation not permitted') ||
+                             errorMsg.includes('permission denied') ||
+                             error.status === 1;
+
+    if (isPermissionError) {
+      try {
+        // Retry with sudo
+        console.log(chalk.yellow(`  ⚠️  Permission denied for PID ${pid}, attempting with sudo...`));
+        execSync(`sudo kill -${signal} ${pid}`, { encoding: 'utf-8', stdio: 'inherit' });
+        return { success: true, usedSudo: true };
+      } catch (sudoError) {
+        return { success: false, usedSudo: true, error: sudoError.message };
+      }
+    }
+
+    return { success: false, usedSudo: false, error: error.message };
   }
 }
 
@@ -175,18 +194,26 @@ async function main() {
           if (confirm) {
             let success = 0;
             let failed = 0;
+            let sudoUsed = 0;
 
             for (const pid of selectedProcesses) {
-              if (killProcess(pid, signal)) {
-                console.log(chalk.green(`✓ Killed process ${pid}`));
+              const result = killProcess(pid, signal);
+              if (result.success) {
+                if (result.usedSudo) {
+                  console.log(chalk.green(`✓ Killed process ${pid} (with sudo)`));
+                  sudoUsed++;
+                } else {
+                  console.log(chalk.green(`✓ Killed process ${pid}`));
+                }
                 success++;
               } else {
-                console.log(chalk.red(`✗ Failed to kill process ${pid} (may require sudo)`));
+                const errorDetail = result.error ? `: ${result.error}` : '';
+                console.log(chalk.red(`✗ Failed to kill process ${pid}${errorDetail}`));
                 failed++;
               }
             }
 
-            console.log(chalk.cyan(`\n${success} processes killed, ${failed} failed`));
+            console.log(chalk.cyan(`\n${success} processes killed${sudoUsed > 0 ? ` (${sudoUsed} with sudo)` : ''}, ${failed} failed`));
             await new Promise(resolve => setTimeout(resolve, 2000));
           }
         }

@@ -57,11 +57,17 @@ The tool uses the `ps` command to gather process information:
 
 ## Permissions
 
-Some processes may require `sudo` privileges to kill. If you encounter permission errors, run the script with:
+The script automatically handles permission issues:
+- First attempts to kill processes without sudo
+- If permission is denied, automatically retries with sudo (you'll be prompted for your password)
+- No need to manually restart the script with sudo
 
+This means you can run the script normally:
 ```bash
-sudo node index.js
+pnpm start
 ```
+
+And it will request sudo privileges only when needed for specific processes.
 
 ## Safety Tips
 
